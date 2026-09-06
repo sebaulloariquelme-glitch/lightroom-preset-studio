@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foto → Preset · Lightroom</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Foto <em>a</em><br>preset</h1>
+    <div class="tagline">análisis de color y ruido<br>→ archivo .xmp<br>para Lightroom</div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <p>Soltá o tocá para elegir una foto de referencia</p>
+    <p class="sub">JPG o PNG · el análisis se hace en tu navegador, la foto no se sube a ningún lado</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="preview-row">
+      <img id="previewImg" alt="Foto de referencia">
+      <div class="preview-meta">
+        <p class="fname" id="fname"></p>
+        <p class="status-line" id="statusLine">analizando…</p>
+        <button class="change-btn" id="changeBtn">elegir otra foto</button>
+      </div>
+    </div>
+
+    <div class="readout" id="readout" style="display:none;">
+      <span class="section-tag">color y tono</span>
+      <div class="bars" id="bars"></div>
+      <div class="swatch-row" id="swatchRow"></div>
+
+      <span class="section-tag">ruido detectado</span>
+      <div class="noise-readout" id="noiseReadout"></div>
+    </div>
+
+    <div class="name-field" id="nameField" style="display:none;">
+      <label for="presetName">nombre del preset (estilo carrete, inventado a partir del análisis)</label>
+      <div class="row">
+        <input type="text" id="presetName" maxlength="60">
+        <button class="btn secondary" id="rerollBtn" type="button" title="Sortear otro nombre">🎲</button>
+      </div>
+    </div>
+
+    <div class="actions" id="actions" style="display:none;">
+      <button class="btn" id="downloadBtn">descargar .xmp</button>
+      <button class="btn secondary" id="rerunBtn">volver a analizar</button>
+    </div>
+
+    <div class="howto">
+      <h2>cómo instalarlo en lightroom mobile (iphone)</h2>
+      <ol>
+        <li>Descargá el .xmp y guardalo en Archivos.</li>
+        <li>Abrí Lightroom → pestaña de fotos → <strong>+</strong> → <strong>Añadir preset</strong> → <strong>Importar preset</strong>.</li>
+        <li>Elegí el archivo .xmp desde Archivos.</li>
+        <li>Va a aparecer en tus Presets de usuario, listo para aplicar a cualquier foto.</li>
+      </ol>
+    </div>
+
+    <div class="footnote" id="footnote"></div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
