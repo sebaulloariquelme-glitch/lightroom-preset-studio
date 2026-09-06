@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import { analyzeColor } from './lib/colorAnalysis.js';
 import { computePresetValues } from './lib/presetValues.js';
 import { buildXMP } from './lib/xmpBuilder.js';
@@ -168,29 +169,31 @@ downloadBtn.addEventListener('click', async () => {
   const name = presetNameInput.value.trim() || 'Mi preset';
   const xmp = buildXMP(currentValues, name);
   const safeFile = name.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || 'preset';
-  const filename = safeFile + '.xmp';
-  const file = new File([xmp], filename, { type: 'application/xml' });
 
-  // En el celular (Safari en iOS, Chrome en Android), el link con "download"
-  // no siempre dispara una descarga real: a veces el navegador abre el XML
-  // como si fuera una página, y el archivo termina sin nombre ni extensión
-  // .xmp. El share sheet nativo entrega el archivo tal cual, así que ahí
-  // "Guardar en Archivos" siempre queda bien.
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return;
-    } catch (err) {
-      if (err && err.name === 'AbortError') return;
-    }
+  // Un .xmp suelto no siempre se descarga bien desde el celular: algunos
+  // navegadores (Safari en iOS, algunos Chrome de Android) tratan el XML
+  // como una página y lo abren en vez de guardarlo, o el share sheet nativo
+  // rechaza compartir ese tipo de archivo. Un .zip es un tipo binario que
+  // todos los navegadores fuerzan a descargar, nunca a mostrar, así que
+  // evita el problema de raíz en vez de depender de cada navegador. En
+  // Archivos (iOS/Android) se abre con un toque y queda descomprimido.
+  const prevLabel = downloadBtn.textContent;
+  downloadBtn.disabled = true;
+  try {
+    const zip = new JSZip();
+    zip.file(safeFile + '.xmp', xmp);
+    const zipBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeFile + '.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = prevLabel;
   }
-
-  const url = URL.createObjectURL(file);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 });
