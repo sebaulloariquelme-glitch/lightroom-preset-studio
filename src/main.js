@@ -1,4 +1,5 @@
 import { analyzeColor } from './lib/colorAnalysis.js';
+import { estimateNoiseSigma } from './lib/noiseAnalysis.js';
 import { computePresetValues } from './lib/presetValues.js';
 import { buildXMP } from './lib/xmpBuilder.js';
 import { generateFilmName } from './lib/filmNames.js';
@@ -37,6 +38,21 @@ function getImageData(img) {
   canvas.width = w; canvas.height = h;
   ctx.drawImage(img, 0, 0, w, h);
   return ctx.getImageData(0, 0, w, h);
+}
+
+// El ruido de sensor es una textura de alta frecuencia: si se mide sobre la
+// misma miniatura reducida que se usa para color (260px), el reescalado la
+// difumina y el sigma sale sistemáticamente más bajo de lo real. Por eso el
+// ruido se mide aparte, en un recorte central a resolución nativa (sin
+// reescalar), que sí conserva la textura real del sensor.
+function getNoiseCropImageData(img) {
+  const CROP = 400;
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const cw = Math.min(CROP, w), ch = Math.min(CROP, h);
+  const sx = Math.floor((w - cw) / 2), sy = Math.floor((h - ch) / 2);
+  canvas.width = cw; canvas.height = ch;
+  ctx.drawImage(img, sx, sy, cw, ch, 0, 0, cw, ch);
+  return ctx.getImageData(0, 0, cw, ch);
 }
 
 function renderBars(colorAnalysis, v) {
@@ -123,7 +139,8 @@ function handleFile(file) {
       try {
         const imageData = getImageData(previewImg);
         const colorAnalysis = analyzeColor(imageData);
-        currentValues = computePresetValues(colorAnalysis, imageData);
+        const noiseSigma = estimateNoiseSigma(getNoiseCropImageData(previewImg));
+        currentValues = computePresetValues(colorAnalysis, noiseSigma);
 
         renderBars(colorAnalysis, currentValues);
         renderNoise(currentValues);

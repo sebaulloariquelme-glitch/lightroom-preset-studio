@@ -15,6 +15,13 @@ export const HUE_BUCKETS = [
   { name: 'Magenta', center: 315, min: 290, max: 345 }
 ];
 
+// Umbral de saturación bajo el cual un píxel se considera "casi neutro" —
+// útil para estimar el balance de blancos real (gray-world sobre grises de
+// la escena, no sobre el color dominante) y para no dejar que el matiz de
+// un píxel casi gris (inestable, básicamente ruido) pese en los promedios
+// de matiz.
+const NEUTRAL_SAT_THRESHOLD = 12;
+
 function bucketForHue(h) {
   for (const b of HUE_BUCKETS) {
     if (b.min > b.max) {
@@ -62,7 +69,22 @@ export function analyzeColor(imageData) {
   const hueStats = {};
   for (const b of HUE_BUCKETS) hueStats[b.name] = { count: 0, sumSat: 0, sumLum: 0, sumSin: 0, sumCos: 0 };
 
-  let cornerLumSum = 0, cornerCount = 0, centerLumSum = 0, centerCount = 0;
+  // Balance de blancos "gray-world" restringido a píxeles casi neutros y en
+  // tonos medios: un promedio sobre TODA la imagen se deja engañar por un
+  // color dominante real de la escena (un atardecer naranja, un bosque
+  // verde) tratándolo como si fuera un desvío de balance de blancos. Los
+  // píxeles casi neutros son los que de verdad delatan un color de fondo.
+  let neutralR = 0, neutralG = 0, neutralB = 0, neutralCount = 0;
+
+  // Cuatro esquinas por separado (no una sola bolsa combinada) para poder
+  // exigir que el oscurecimiento/aclarado sea consistente en las cuatro
+  // antes de atribuirlo a viñeta real, y no a un sujeto o sombra puntual
+  // en una sola esquina.
+  const cornerSums = [0, 0, 0, 0];
+  const cornerCounts = [0, 0, 0, 0];
+  let centerLumSum = 0, centerCount = 0;
+
+  let clippedHighlightCount = 0, clippedShadowCount = 0;
 
   for (let idx = 0; idx < n; idx++) {
     const i = idx * 4;
@@ -73,6 +95,13 @@ export function analyzeColor(imageData) {
     const [hue, sat] = rgbToHsl(r, g, b);
     sumSat += sat;
 
+    if (lum >= 250) clippedHighlightCount++;
+    if (lum <= 5) clippedShadowCount++;
+
+    if (sat < NEUTRAL_SAT_THRESHOLD && lum > 20 && lum < 235) {
+      neutralR += r; neutralG += g; neutralB += b; neutralCount++;
+    }
+
     if (sat > 8) {
       const bucket = bucketForHue(hue);
       const hs = hueStats[bucket.name];
@@ -80,16 +109,24 @@ export function analyzeColor(imageData) {
       hs.sumSat += sat;
       hs.sumLum += lum;
       const rad = (hue * Math.PI) / 180;
-      hs.sumSin += Math.sin(rad);
-      hs.sumCos += Math.cos(rad);
+      // Ponderado por saturación: un píxel bien saturado dice mucho más
+      // sobre el matiz dominante del bucket que uno apenas por encima del
+      // umbral, cuyo matiz es casi ruido.
+      hs.sumSin += Math.sin(rad) * sat;
+      hs.sumCos += Math.cos(rad) * sat;
     }
 
     const x = idx % w, y = Math.floor(idx / w);
     const nx = x / w, ny = y / h;
-    const isCorner = (nx < 0.18 || nx > 0.82) && (ny < 0.18 || ny > 0.82);
     const isCenter = nx > 0.35 && nx < 0.65 && ny > 0.35 && ny < 0.65;
-    if (isCorner) { cornerLumSum += lum; cornerCount++; }
     if (isCenter) { centerLumSum += lum; centerCount++; }
+
+    const inLeft = nx < 0.18, inRight = nx > 0.82;
+    const inTop = ny < 0.18, inBottom = ny > 0.82;
+    if (inTop && inLeft) { cornerSums[0] += lum; cornerCounts[0]++; }
+    else if (inTop && inRight) { cornerSums[1] += lum; cornerCounts[1]++; }
+    else if (inBottom && inLeft) { cornerSums[2] += lum; cornerCounts[2]++; }
+    else if (inBottom && inRight) { cornerSums[3] += lum; cornerCounts[3]++; }
   }
 
   const avgR = sumR / n, avgG = sumG / n, avgB = sumB / n;
@@ -108,6 +145,16 @@ export function analyzeColor(imageData) {
   const p80 = sortedLums[Math.floor(n * 0.8)];
   const p95 = sortedLums[Math.floor(n * 0.95)];
 
+  // Si hay suficientes píxeles casi neutros en tonos medios, el balance de
+  // blancos se calcula solo con esos; si no (foto muy saturada o casi
+  // monocromática), no hay una base neutra confiable y se cae de nuevo al
+  // promedio de toda la imagen.
+  const neutralFrac = neutralCount / n;
+  const useNeutralWB = neutralFrac > 0.02;
+  const wbR = useNeutralWB ? neutralR / neutralCount : avgR;
+  const wbG = useNeutralWB ? neutralG / neutralCount : avgG;
+  const wbB = useNeutralWB ? neutralB / neutralCount : avgB;
+
   // Segunda pasada: color dominante en sombras (<=p20) vs. luces (>=p80) para split toning
   let shSin = 0, shCos = 0, shSat = 0, shCount = 0;
   let hiSin = 0, hiCos = 0, hiSat = 0, hiCount = 0;
@@ -119,9 +166,9 @@ export function analyzeColor(imageData) {
     if (sat < 5) continue;
     const rad = (hue * Math.PI) / 180;
     if (lum <= p20) {
-      shSin += Math.sin(rad); shCos += Math.cos(rad); shSat += sat; shCount++;
+      shSin += Math.sin(rad) * sat; shCos += Math.cos(rad) * sat; shSat += sat; shCount++;
     } else if (lum >= p80) {
-      hiSin += Math.sin(rad); hiCos += Math.cos(rad); hiSat += sat; hiCount++;
+      hiSin += Math.sin(rad) * sat; hiCos += Math.cos(rad) * sat; hiSat += sat; hiCount++;
     }
   }
 
@@ -143,6 +190,23 @@ export function analyzeColor(imageData) {
     ? { hue: ((Math.atan2(hiSin, hiCos) * 180) / Math.PI + 360) % 360, sat: hiSat / hiCount }
     : null;
 
+  // Viñeta: solo se atribuye a viñeteo real si las cuatro esquinas se
+  // oscurecen (o aclaran) de forma consistente respecto al centro. Un
+  // sujeto o una sombra puntual en una sola esquina no debería leerse
+  // como viñeta.
+  const centerLum = centerCount ? centerLumSum / centerCount : avgLum;
+  const cornerLums = cornerSums.map((sum, i) => (cornerCounts[i] ? sum / cornerCounts[i] : centerLum));
+  const cornerDeltas = cornerLums.map((c) => c - centerLum);
+  const meanDelta = cornerDeltas.reduce((a, d) => a + d, 0) / 4;
+  const sameSign = cornerDeltas.every((d) => Math.sign(d) === Math.sign(meanDelta) || Math.abs(d) < 2);
+  let deltaVariance = 0;
+  for (const d of cornerDeltas) deltaVariance += (d - meanDelta) ** 2;
+  const deltaSpread = Math.sqrt(deltaVariance / 4);
+  // Si la dispersión entre esquinas es grande respecto a la magnitud del
+  // oscurecimiento medio, no es simétrico -> no es viñeta real.
+  const consistentVignette = sameSign && deltaSpread < Math.max(8, Math.abs(meanDelta) * 0.6);
+  const cornerLum = consistentVignette ? centerLum + meanDelta : centerLum;
+
   // Muestras espaciales de color, para mostrar en la UI
   const swatches = [];
   for (let k = 0; k < 5; k++) {
@@ -155,10 +219,12 @@ export function analyzeColor(imageData) {
   return {
     width: w, height: h,
     avgR, avgG, avgB, avgSat, avgLum, stdLum,
+    wbR, wbG, wbB, neutralFrac,
     p05, p20, p80, p95,
+    clippedHighlightFrac: clippedHighlightCount / n,
+    clippedShadowFrac: clippedShadowCount / n,
     hues, splitShadow, splitHighlight,
-    cornerLum: cornerCount ? cornerLumSum / cornerCount : avgLum,
-    centerLum: centerCount ? centerLumSum / centerCount : avgLum,
+    cornerLum, centerLum,
     swatches
   };
 }
