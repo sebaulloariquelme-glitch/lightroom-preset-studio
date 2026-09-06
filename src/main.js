@@ -1,8 +1,8 @@
-import JSZip from 'jszip';
 import { analyzeColor } from './lib/colorAnalysis.js';
 import { computePresetValues } from './lib/presetValues.js';
 import { buildXMP } from './lib/xmpBuilder.js';
 import { generateFilmName } from './lib/filmNames.js';
+import { zipSingleFile } from './lib/zip.js';
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
@@ -164,7 +164,7 @@ rerollBtn.addEventListener('click', () => {
   presetNameInput.value = generateFilmName(currentValues);
 });
 
-downloadBtn.addEventListener('click', async () => {
+downloadBtn.addEventListener('click', () => {
   if (!currentValues) return;
   const name = presetNameInput.value.trim() || 'Mi preset';
   const xmp = buildXMP(currentValues, name);
@@ -180,9 +180,7 @@ downloadBtn.addEventListener('click', async () => {
   const prevLabel = downloadBtn.textContent;
   downloadBtn.disabled = true;
   try {
-    const zip = new JSZip();
-    zip.file(safeFile + '.xmp', xmp);
-    const zipBlob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+    const zipBlob = zipSingleFile(safeFile + '.xmp', xmp);
 
     const url = URL.createObjectURL(zipBlob);
     const a = document.createElement('a');
