@@ -170,7 +170,7 @@ downloadBtn.addEventListener('click', () => {
   const blob = new Blob([xmp], { type: 'application/xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const safeFile = name.replace(/[^a-z0-9\-_ ]/gi, '').trim().replace(/\s+/g, '-') || 'preset';
+  const safeFile = name.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || 'preset';
   a.href = url;
   a.download = safeFile + '.xmp';
   document.body.appendChild(a);
