@@ -15,11 +15,12 @@
     <div class="tagline">análisis de color y ruido<br>→ archivo .xmp<br>para Lightroom</div>
   </header>
 
-  <div class="dropzone" id="dropzone">
+  <label class="dropzone" for="fileInput" id="dropzone">
     <p>Soltá o tocá para elegir una foto de referencia</p>
     <p class="sub">JPG o PNG · el análisis se hace en tu navegador, la foto no se sube a ningún lado</p>
+    <span class="btn dropzone-btn" aria-hidden="true">elegir foto</span>
     <input type="file" id="fileInput" accept="image/*">
-  </div>
+  </label>
 
   <div class="stage" id="stage">
     <div class="preview-row">
@@ -27,7 +28,7 @@
       <div class="preview-meta">
         <p class="fname" id="fname"></p>
         <p class="status-line" id="statusLine">analizando…</p>
-        <button class="change-btn" id="changeBtn">elegir otra foto</button>
+        <label class="change-btn" for="fileInput" id="changeBtn">elegir otra foto</label>
       </div>
     </div>
 

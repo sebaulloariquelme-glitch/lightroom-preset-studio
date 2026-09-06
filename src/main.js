@@ -142,7 +142,12 @@ function handleFile(file) {
   };
 }
 
-dropzone.addEventListener('click', () => fileInput.click());
+// El dropzone y "elegir otra foto" son <label for="fileInput">: el navegador
+// abre el selector de archivos de forma nativa con solo tocarlos, sin pasar
+// por un .click() disparado por script (que en algunos navegadores móviles,
+// sobre todo Safari en iOS con el input oculto por display:none, no siempre
+// abre el selector).
+dropzone.addEventListener('click', () => { fileInput.value = ''; });
 dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop', (e) => {
@@ -152,7 +157,7 @@ dropzone.addEventListener('drop', (e) => {
 });
 fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
 
-changeBtn.addEventListener('click', () => { fileInput.value = ''; fileInput.click(); });
+changeBtn.addEventListener('click', () => { fileInput.value = ''; });
 
 rerunBtn.addEventListener('click', () => {
   statusLine.textContent = 'analizando de nuevo…';
