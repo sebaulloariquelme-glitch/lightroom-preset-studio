@@ -142,6 +142,7 @@ export function analyzeColor(imageData) {
   const sortedLums = Float32Array.from(lums).sort();
   const p05 = sortedLums[Math.floor(n * 0.05)];
   const p20 = sortedLums[Math.floor(n * 0.2)];
+  const p50 = sortedLums[Math.floor(n * 0.5)];
   const p80 = sortedLums[Math.floor(n * 0.8)];
   const p95 = sortedLums[Math.floor(n * 0.95)];
 
@@ -256,7 +257,7 @@ export function analyzeColor(imageData) {
     width: w, height: h,
     avgR, avgG, avgB, avgSat, avgLum, stdLum,
     wbR, wbG, wbB, neutralFrac,
-    p05, p20, p80, p95,
+    p05, p20, p50, p80, p95,
     clippedHighlightFrac: clippedHighlightCount / n,
     clippedShadowFrac: clippedShadowCount / n,
     hues, splitShadow, splitMidtone, splitHighlight,

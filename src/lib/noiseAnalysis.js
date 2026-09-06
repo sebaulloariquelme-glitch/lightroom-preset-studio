@@ -53,8 +53,14 @@ export function noiseToSliders(sigma) {
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
   const luminanceSmoothing = Math.round(clamp(sigma * 5.5, 0, 70));
   const luminanceDetail = Math.round(clamp(50 - sigma * 1.5, 20, 50));
+  // Más reducción de ruido de color pide bajar un poco el "detalle" para no
+  // reintroducir manchas de color; poca reducción no lo necesita.
   const colorNoiseReduction = Math.round(clamp(sigma * 4, 0, 60));
-  const colorNoiseDetail = 50;
+  const colorNoiseDetail = Math.round(clamp(70 - colorNoiseReduction * 0.4, 30, 70));
+  // Reducción de ruido de luminancia más fuerte compensada con algo de
+  // contraste extra en esa misma reducción, para no perder toda la pegada
+  // tonal al suavizar una foto ruidosa.
+  const luminanceNoiseContrast = Math.round(clamp(sigma * 1.2, 0, 30));
 
   const sharpenAmount = Math.round(clamp(48 - sigma * 2.2, 15, 55));
   const sharpenRadius = 1.0;
@@ -63,7 +69,7 @@ export function noiseToSliders(sigma) {
 
   return {
     sigma,
-    luminanceSmoothing, luminanceDetail,
+    luminanceSmoothing, luminanceDetail, luminanceNoiseContrast,
     colorNoiseReduction, colorNoiseDetail,
     sharpenAmount, sharpenRadius, sharpenDetail, sharpenEdgeMasking
   };

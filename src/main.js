@@ -58,7 +58,7 @@ function getNoiseCropImageData(img) {
 function renderBars(colorAnalysis, v) {
   const rows = [
     ['Temperatura', v.temp, 2000, 9500, v.temp + 'K', true],
-    ['Tinte', v.tint, -80, 80, v.tint],
+    ['Tinte', v.incrementalTint, -100, 100, v.incrementalTint],
     ['Exposición', v.exposure, -1.5, 1.5, v.exposure],
     ['Contraste', v.contrast, -80, 80, v.contrast],
     ['Luces', v.highlights, -100, 60, v.highlights],
@@ -67,6 +67,9 @@ function renderBars(colorAnalysis, v) {
     ['Negros', v.blacks, -60, 60, v.blacks],
     ['Vibrancia', v.vibrance, -80, 80, v.vibrance],
     ['Saturación', v.saturation, -40, 40, v.saturation],
+    ['Textura', v.texture, -40, 40, v.texture],
+    ['Claridad', v.clarity, -30, 30, v.clarity],
+    ['Dehaze', v.dehaze, -50, 50, v.dehaze],
     ['Viñeta', v.vignetteAmount, -55, 55, v.vignetteAmount]
   ];
   bars.innerHTML = '';

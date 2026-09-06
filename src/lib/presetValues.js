@@ -9,14 +9,25 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
   const a = colorAnalysis;
 
   // --- Básico ---
-  // Temperatura y tinte se calculan sobre el balance de blancos "gray-world"
-  // (ver wbR/wbG/wbB en colorAnalysis.js): promedio de los píxeles casi
-  // neutros de la foto, no de toda la imagen. Así un color dominante real
-  // de la escena (un atardecer, un bosque) no se confunde con un desvío de
-  // balance de blancos a corregir.
+  // Balance de blancos "gray-world" restringido a píxeles casi neutros (ver
+  // wbR/wbG/wbB en colorAnalysis.js): promedio de los píxeles casi neutros
+  // de la foto, no de toda la imagen, para que un color dominante real de
+  // la escena (un atardecer, un bosque) no se confunda con un desvío a
+  // corregir.
   const rbDiff = a.wbR - a.wbB;
+  // "temp" es un valor Kelvin aproximado, solo para mostrar en la UI un
+  // número entendible ("esta foto lee cálida, ~7000K"). El XMP en sí NO usa
+  // este valor: crs:Temp/crs:Tint son Kelvin absoluto, válido solo para RAW
+  // (que trae su propio balance de blancos "As Shot" de referencia). En una
+  // foto JPG, Lightroom mueve el balance de blancos con un offset relativo
+  // (-100 a +100) sobre lo que la foto ya tenía — por eso el XMP usa
+  // crs:IncrementalTemperature/crs:IncrementalTint en vez de crs:Temp/Tint;
+  // escribir Kelvin absoluto ahí hacía que Lightroom lo recortara siempre
+  // al máximo de esa escala relativa (se veía "pegado en 100").
   const temp = Math.round(clamp(5500 + rbDiff * 22, 2000, 9500));
-  const tint = Math.round(clamp((a.wbG - (a.wbR + a.wbB) / 2) * -1.1, -80, 80));
+  const incrementalTemp = Math.round(clamp(rbDiff * 1.3, -100, 100));
+  const incrementalTint = Math.round(clamp((a.wbG - (a.wbR + a.wbB) / 2) * -1.1, -100, 100));
+
   const contrast = Math.round(clamp((a.stdLum - 52) * 1.4, -80, 80));
   const exposure = +clamp((a.avgLum - 118) / 180, -1.5, 1.5).toFixed(2);
 
@@ -51,6 +62,20 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
   const flatness = clamp(70 - a.stdLum, 0, 50);
   const dehaze = -Math.round(clamp(liftedBlacks * 0.5 + flatness * 0.3, 0, 45));
 
+  // --- Curva de tono paramétrica (Sombras/Oscuros/Claros/Luces) ---
+  // Un eco más suave (30%) de los mismos sliders básicos de arriba, para no
+  // duplicar de más el mismo empuje tonal por dos caminos distintos. Los
+  // puntos de separación de las zonas se ubican donde la foto realmente
+  // tiene su sombra/medio/luz (percentiles de luminancia), en vez de los
+  // valores fijos 25/50/75 que usa Lightroom por defecto en toda foto.
+  const parametricShadows = Math.round(clamp(shadows * 0.3, -40, 40));
+  const parametricDarks = Math.round(clamp(blacks * 0.3, -40, 40));
+  const parametricLights = Math.round(clamp(whites * 0.3, -40, 40));
+  const parametricHighlights = Math.round(clamp(highlights * 0.3, -40, 40));
+  const parametricShadowSplit = Math.round(clamp((a.p20 / 255) * 100, 10, 40));
+  const parametricMidtoneSplit = Math.round(clamp((a.p50 / 255) * 100, 35, 65));
+  const parametricHighlightSplit = Math.round(clamp((a.p80 / 255) * 100, 60, 90));
+
   // --- Panel HSL (8 colores) ---
   const hsl = {};
   for (const b of HUE_BUCKETS) {
@@ -66,7 +91,7 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
     };
   }
 
-  // --- Split toning ---
+  // --- Split toning (clásico) ---
   const splitShadowHue = a.splitShadow ? Math.round(a.splitShadow.hue) : (temp > 5500 ? 30 : 210);
   const splitShadowSat = a.splitShadow ? Math.round(clamp(a.splitShadow.sat * 0.55, 0, 45)) : 0;
   const splitHighlightHue = a.splitHighlight ? Math.round(a.splitHighlight.hue) : (temp > 5500 ? 45 : 200);
@@ -107,10 +132,16 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
   const vignetteFeather = 65;
   const vignetteRoundness = 0;
   const vignetteStyle = 1; // 1 = Highlight Priority (estándar de Lightroom)
+  // Más viñeta pide algo más de contraste en su transición, para que no se
+  // vea como un simple degradado plano de brillo.
+  const vignetteHighlightContrast = Math.round(clamp(Math.abs(vignetteAmount) * 0.35, 0, 25));
 
   return {
-    temp, tint, contrast, exposure, highlights, shadows, whites, blacks,
+    temp, incrementalTemp, incrementalTint,
+    contrast, exposure, highlights, shadows, whites, blacks,
     vibrance, saturation, texture, clarity, dehaze, hsl,
+    parametricShadows, parametricDarks, parametricLights, parametricHighlights,
+    parametricShadowSplit, parametricMidtoneSplit, parametricHighlightSplit,
     splitShadowHue, splitShadowSat, splitHighlightHue, splitHighlightSat, splitBalance,
     colorGradeShadowHue, colorGradeShadowSat,
     colorGradeMidtoneHue, colorGradeMidtoneSat,
@@ -123,9 +154,11 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
     sharpenEdgeMasking: noise.sharpenEdgeMasking,
     luminanceSmoothing: noise.luminanceSmoothing,
     luminanceDetail: noise.luminanceDetail,
+    luminanceNoiseContrast: noise.luminanceNoiseContrast,
     colorNoiseReduction: noise.colorNoiseReduction,
     colorNoiseDetail: noise.colorNoiseDetail,
     grainAmount, grainSize, grainFrequency,
-    vignetteAmount, vignetteMidpoint, vignetteFeather, vignetteRoundness, vignetteStyle
+    vignetteAmount, vignetteMidpoint, vignetteFeather, vignetteRoundness, vignetteStyle,
+    vignetteHighlightContrast
   };
 }
