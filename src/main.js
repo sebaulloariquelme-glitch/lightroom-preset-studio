@@ -163,16 +163,32 @@ rerollBtn.addEventListener('click', () => {
   presetNameInput.value = generateFilmName(currentValues);
 });
 
-downloadBtn.addEventListener('click', () => {
+downloadBtn.addEventListener('click', async () => {
   if (!currentValues) return;
   const name = presetNameInput.value.trim() || 'Mi preset';
   const xmp = buildXMP(currentValues, name);
-  const blob = new Blob([xmp], { type: 'application/xml' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
   const safeFile = name.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || 'preset';
+  const filename = safeFile + '.xmp';
+  const file = new File([xmp], filename, { type: 'application/xml' });
+
+  // En el celular (Safari en iOS, Chrome en Android), el link con "download"
+  // no siempre dispara una descarga real: a veces el navegador abre el XML
+  // como si fuera una página, y el archivo termina sin nombre ni extensión
+  // .xmp. El share sheet nativo entrega el archivo tal cual, así que ahí
+  // "Guardar en Archivos" siempre queda bien.
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+  }
+
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
   a.href = url;
-  a.download = safeFile + '.xmp';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
