@@ -155,9 +155,12 @@ export function analyzeColor(imageData) {
   const wbG = useNeutralWB ? neutralG / neutralCount : avgG;
   const wbB = useNeutralWB ? neutralB / neutralCount : avgB;
 
-  // Segunda pasada: color dominante en sombras (<=p20) vs. luces (>=p80) para split toning
+  // Segunda pasada: color dominante en sombras (<=p20), medios tonos y luces
+  // (>=p80) — sombras/luces alimentan el split toning clásico, y las tres
+  // zonas juntas alimentan el panel moderno de Color Grading (3 ruedas).
   let shSin = 0, shCos = 0, shSat = 0, shCount = 0;
   let hiSin = 0, hiCos = 0, hiSat = 0, hiCount = 0;
+  let midSin = 0, midCos = 0, midSat = 0, midCount = 0;
   for (let idx = 0; idx < n; idx++) {
     const i = idx * 4;
     const r = data[i], g = data[i + 1], b = data[i + 2];
@@ -169,6 +172,8 @@ export function analyzeColor(imageData) {
       shSin += Math.sin(rad) * sat; shCos += Math.cos(rad) * sat; shSat += sat; shCount++;
     } else if (lum >= p80) {
       hiSin += Math.sin(rad) * sat; hiCos += Math.cos(rad) * sat; hiSat += sat; hiCount++;
+    } else {
+      midSin += Math.sin(rad) * sat; midCos += Math.cos(rad) * sat; midSat += sat; midCount++;
     }
   }
 
@@ -189,6 +194,9 @@ export function analyzeColor(imageData) {
   const splitHighlight = hiCount > n * 0.01
     ? { hue: ((Math.atan2(hiSin, hiCos) * 180) / Math.PI + 360) % 360, sat: hiSat / hiCount }
     : null;
+  const splitMidtone = midCount > n * 0.01
+    ? { hue: ((Math.atan2(midSin, midCos) * 180) / Math.PI + 360) % 360, sat: midSat / midCount }
+    : null;
 
   // Viñeta: solo se atribuye a viñeteo real si las cuatro esquinas se
   // oscurecen (o aclaran) de forma consistente respecto al centro. Un
@@ -207,6 +215,34 @@ export function analyzeColor(imageData) {
   const consistentVignette = sameSign && deltaSpread < Math.max(8, Math.abs(meanDelta) * 0.6);
   const cornerLum = consistentVignette ? centerLum + meanDelta : centerLum;
 
+  // Contraste local (textura/claridad): diferencia promedio entre cada
+  // píxel y una versión suavizada (box blur) de la luminancia. Es una
+  // frecuencia intermedia entre el ruido de sensor (muy alta frecuencia,
+  // ver noiseAnalysis.js) y el contraste global (el desvío estándar de
+  // toda la imagen, ya capturado en stdLum): mucha diferencia local quiere
+  // decir mucho micro-detalle/textura en la foto de referencia.
+  const BLUR_RADIUS = 2;
+  const blurred = new Float32Array(n);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sum = 0, count = 0;
+      for (let dy = -BLUR_RADIUS; dy <= BLUR_RADIUS; dy++) {
+        const ny = y + dy;
+        if (ny < 0 || ny >= h) continue;
+        for (let dx = -BLUR_RADIUS; dx <= BLUR_RADIUS; dx++) {
+          const nx = x + dx;
+          if (nx < 0 || nx >= w) continue;
+          sum += lums[ny * w + nx];
+          count++;
+        }
+      }
+      blurred[y * w + x] = sum / count;
+    }
+  }
+  let localContrastSum = 0;
+  for (let i = 0; i < n; i++) localContrastSum += Math.abs(lums[i] - blurred[i]);
+  const localContrast = localContrastSum / n;
+
   // Muestras espaciales de color, para mostrar en la UI
   const swatches = [];
   for (let k = 0; k < 5; k++) {
@@ -223,7 +259,8 @@ export function analyzeColor(imageData) {
     p05, p20, p80, p95,
     clippedHighlightFrac: clippedHighlightCount / n,
     clippedShadowFrac: clippedShadowCount / n,
-    hues, splitShadow, splitHighlight,
+    hues, splitShadow, splitMidtone, splitHighlight,
+    localContrast,
     cornerLum, centerLum,
     swatches
   };

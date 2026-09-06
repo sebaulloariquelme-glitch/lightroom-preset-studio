@@ -33,6 +33,24 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
   const vibrance = Math.round(clamp((a.avgSat - 38) * 1.6, -80, 80));
   const saturation = Math.round(clamp((a.avgSat - 38) * 0.6, -40, 40));
 
+  // Textura y claridad, a partir del contraste local real de la foto (ver
+  // localContrast en colorAnalysis.js): mucho micro-detalle en la
+  // referencia sugiere empujar estos sliders, poco detalle (foto suave,
+  // desenfocada, con neblina) sugiere dejarlos en 0 o negativos.
+  const texture = Math.round(clamp((a.localContrast - 4) * 6, -30, 40));
+  const clarity = Math.round(clamp((a.localContrast - 4) * 4, -25, 35));
+
+  // Dehaze: una aproximación, no una medición física de neblina real. Una
+  // foto con las sombras "levantadas" (p05 alto, los negros no llegan a
+  // negro real) y poco contraste global es la firma típica de una escena
+  // con niebla o bruma. Como el resto de la herramienta, el objetivo es
+  // replicar el carácter de la referencia (si la referencia es brumosa,
+  // el preset debería sumar esa bruma a otras fotos), así que el resultado
+  // es negativo (agrega velo) en vez de positivo (lo quitaría).
+  const liftedBlacks = clamp(a.p05 - 12, 0, 60);
+  const flatness = clamp(70 - a.stdLum, 0, 50);
+  const dehaze = -Math.round(clamp(liftedBlacks * 0.5 + flatness * 0.3, 0, 45));
+
   // --- Panel HSL (8 colores) ---
   const hsl = {};
   for (const b of HUE_BUCKETS) {
@@ -55,6 +73,22 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
   const splitHighlightSat = a.splitHighlight ? Math.round(clamp(a.splitHighlight.sat * 0.4, 0, 35)) : 0;
   const splitBalance = Math.round(clamp((splitShadowSat - splitHighlightSat) * 0.6, -60, 60));
 
+  // --- Color Grading (rueda moderna de 3 zonas) ---
+  // Misma información que el split toning de arriba (sombras/luces), más
+  // una zona de medios tonos, para que el panel de Color Grading de
+  // Lightroom (el que de verdad usa la mayoría hoy) también muestre algo
+  // en vez de quedarse en cero.
+  const splitMidtoneHue = a.splitMidtone ? Math.round(a.splitMidtone.hue) : (temp > 5500 ? 40 : 220);
+  const splitMidtoneSat = a.splitMidtone ? Math.round(clamp(a.splitMidtone.sat * 0.35, 0, 30)) : 0;
+
+  const colorGradeShadowHue = splitShadowHue;
+  const colorGradeShadowSat = Math.round(clamp(splitShadowSat * 0.8, 0, 40));
+  const colorGradeMidtoneHue = splitMidtoneHue;
+  const colorGradeMidtoneSat = splitMidtoneSat;
+  const colorGradeHighlightHue = splitHighlightHue;
+  const colorGradeHighlightSat = Math.round(clamp(splitHighlightSat * 0.8, 0, 35));
+  const colorGradeBlending = (colorGradeShadowSat > 3 || colorGradeMidtoneSat > 3 || colorGradeHighlightSat > 3) ? 50 : 100;
+
   // --- Ruido real detectado (Immerkær) -> nitidez + reducción de ruido ---
   const noise = noiseToSliders(noiseSigma);
 
@@ -76,8 +110,12 @@ export function computePresetValues(colorAnalysis, noiseSigma) {
 
   return {
     temp, tint, contrast, exposure, highlights, shadows, whites, blacks,
-    vibrance, saturation, hsl,
+    vibrance, saturation, texture, clarity, dehaze, hsl,
     splitShadowHue, splitShadowSat, splitHighlightHue, splitHighlightSat, splitBalance,
+    colorGradeShadowHue, colorGradeShadowSat,
+    colorGradeMidtoneHue, colorGradeMidtoneSat,
+    colorGradeHighlightHue, colorGradeHighlightSat,
+    colorGradeBlending,
     noiseSigma,
     sharpenAmount: noise.sharpenAmount,
     sharpenRadius: noise.sharpenRadius,
